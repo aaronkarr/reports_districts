@@ -19,7 +19,6 @@ def load_df():
 
 def add_custom_field(custom_values_col, key):
     pattern = rf".*{key}: (\w+)"
-    print(pattern)
     # repl = r"\1"
     trimmed = custom_values_col.str.replace(r'[\{\}"\n]', "", regex=True)
     series = trimmed.str.replace(pattern, r"\1", regex=True)
@@ -31,8 +30,16 @@ def main():
     df["REVENUE_STREAM"] = add_custom_field(
         df.PROJECT_CUSTOM_FIELD_VALUES_JSON, "Revenue Stream"
     )
+    df["SOFT_CREDIT_SELECTION"] = add_custom_field(
+        df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit"
+    )
+    df["SOFT_CREDIT_CHURCH"] = add_custom_field(
+        df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit Church"
+    )
+
     print(df.REVENUE_STREAM.value_counts())
-    # print(df.PROJECT_CUSTOM_FIELD_VALUES_JSON.value_counts())
+    print(df.SOFT_CREDIT_SELECTION.value_counts())
+    print(df.SOFT_CREDIT_CHURCH.value_counts())
 
 
 if __name__ == "__main__":
