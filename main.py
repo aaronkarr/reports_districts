@@ -53,10 +53,10 @@ def main():
     #         ["CONTACT_NAME", "SOFT_CREDIT_CHURCH"]
     #     ].value_counts()
     # )
-    print("------")
-    print(df.CHURCH_DISTRICT.value_counts())
-    print("------")
-    print(df[["ALLIANCE_CHURCH", "CONTACT_TYPE"]].value_counts())
+    by_district = df.groupby("CHURCH_DISTRICT")[
+        ["CONTACT_NAME", "CONVERTED_DESIGNATED_AMOUNT"]
+    ].sum()
+    print(by_district)
 
 
 if __name__ == "__main__":
