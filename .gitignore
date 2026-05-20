@@ -1,4 +1,5 @@
 data/
+out/
 
 # Python-generated files
 __pycache__/
