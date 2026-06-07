@@ -1,10 +1,16 @@
 import pandas as pd
 import numpy as np
 import os
+import sys
 
 pd.set_option({"display.max_rows": 100, "display.max_columns": 50})
 
-gifts_filepath = "data/gift_designations_2025.csv"
+if len(sys.argv) == 2:
+    if os.path.exists(sys.argv[1]):
+        gifts_filepath = sys.argv[1]
+else:
+    gifts_filepath = "data/gift_designations_2025.csv"
+
 churches_filepath = "data/alliance_churches.csv"
 projects_filepath = "data/project_reporting_categories.csv"
 output_filepath = "out/gifts_by_month.csv"
