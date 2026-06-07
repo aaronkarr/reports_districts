@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
+import os
 
 pd.set_option({"display.max_rows": 100, "display.max_columns": 50})
 
 gifts_filepath = "data/gift_designations_2025.csv"
 churches_filepath = "data/alliance_churches.csv"
 projects_filepath = "data/project_reporting_categories.csv"
+output_filepath = "out/gifts_by_month.csv"
 
 usecols = [
     "GIFT_DATE",
@@ -39,36 +41,38 @@ dtypes = {
 
 
 def load_gift_df():
-    df = pd.read_csv(
+    gift_df = pd.read_csv(
         gifts_filepath,
         parse_dates=["GIFT_DATE"],
         usecols=usecols,
         dtype=dtypes,
     )
-    df["AMOUNT"] = df.CONVERTED_AMOUNT_DESIGNATED
+    gift_df["AMOUNT"] = gift_df.CONVERTED_AMOUNT_DESIGNATED
     # df["REVENUE_STREAM"] = add_custom_field(
     #     df.PROJECT_CUSTOM_FIELD_VALUES_JSON, "Revenue Stream"
     # )
-    df["SOFT_CREDIT_SELECTION"] = add_custom_col(
-        df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit"
+    gift_df["SOFT_CREDIT_SELECTION"] = add_custom_col(
+        gift_df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit"
     ).eq("Yes")
-    df["SOFT_CREDIT_CHURCH"] = add_custom_col(
-        df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit Church"
+    gift_df["SOFT_CREDIT_CHURCH"] = add_custom_col(
+        gift_df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit Church"
     )
-    df["SOFT_CREDIT_CHURCH_CODE"] = df.SOFT_CREDIT_CHURCH.str.extract(r".*\[(.*)\]")
-    df["CHURCH_CODE"] = add_custom_col(
-        df.CONTACT_CUSTOM_FIELD_VALUES_JSON, "Church Code"
+    gift_df["SOFT_CREDIT_CHURCH_CODE"] = gift_df.SOFT_CREDIT_CHURCH.str.extract(
+        r".*\[(.*)\]"
+    )
+    gift_df["CHURCH_CODE"] = add_custom_col(
+        gift_df.CONTACT_CUSTOM_FIELD_VALUES_JSON, "Church Code"
     )
     # df["CHURCH_DISTRICT"] = tag_to_col(df.CONTACT_TAG_LIST, "District")
-    df["ALLIANCE_CHURCH"] = df.CONTACT_TAG_LIST.str.contains(
+    gift_df["ALLIANCE_CHURCH"] = gift_df.CONTACT_TAG_LIST.str.contains(
         "alliance church", case=False
     )
-    df["YEAR"] = df.GIFT_DATE.dt.year
-    df["MONTH"] = df.GIFT_DATE.dt.month
-    df["CREDIT_TO"] = add_credit_col(df)
+    gift_df["YEAR"] = gift_df.GIFT_DATE.dt.year
+    gift_df["MONTH"] = gift_df.GIFT_DATE.dt.month
+    gift_df["CREDIT_TO"] = add_credit_col(gift_df)
 
-    df.drop(columns=drop_cols, inplace=True)
-    return df
+    gift_df.drop(columns=drop_cols, inplace=True)
+    return gift_df
 
 
 def add_custom_col(custom_values_col, key):
@@ -112,40 +116,56 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
                 "YEAR",
                 "MONTH",
                 "CREDIT_TO",
+                "CATEGORY",
                 # "CHURCH_NAME",
                 # "CHURCH_CODE",
                 # "CHURCH_STATUS",
                 # "DISTRICT_NAME",
                 # "ASSOCIATION_NAME",
                 "AMOUNT",
-                "CATEGORY",
             ]
         ]
         .groupby(
             [
                 "YEAR",
                 "MONTH",
+                "CATEGORY",
                 "CREDIT_TO",
                 # "CHURCH_NAME",
                 # "CHURCH_CODE",
                 # "CHURCH_STATUS",
                 # "DISTRICT_NAME",
                 # "ASSOCIATION_NAME",
-                "AMOUNT",
-                "CATEGORY",
             ],
             as_index=False,
             dropna=False,
         )
         .agg({"AMOUNT": "sum"})
     )
+
+    gifts_by_month["YTD_AMOUNT"] = (
+        gifts_by_month.groupby(["YEAR", "CATEGORY", "CREDIT_TO"])["AMOUNT"]
+        .cumsum()
+        .round(2)
+    )
+    gifts_by_month["AMOUNT_LAST_YEAR"] = gifts_by_month.groupby(
+        ["CATEGORY", "CREDIT_TO"]
+    )["AMOUNT"].shift(12)
+    gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(["CATEGORY", "CREDIT_TO"])[
+        "YTD_AMOUNT"
+    ].shift(12)
+
+    # join church info; TODO outer join to include churches without contributions,
+    # and corresponding fillna of date cols to prevent conversion to float
     gifts_by_month = pd.merge(
         gifts_by_month,
         churches_df,
-        how="outer",
+        how="left",
         left_on="CREDIT_TO",
         right_on="CHURCH_CODE",
     )
+    gifts_by_month.drop(columns="CONTACT_ID", inplace=True)
+
     # gifts_by_month = gifts_by_month.astype({"MONTH": "int", "YEAR": "int"})
     # print(gifts_by_category[gifts_by_category.CATEGORY.isna()])
     # gifts_by_month.CREDIT_TO.rename("CHURCH_CODE")
@@ -158,38 +178,22 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
 
 
 def main():
+    print("Loading dataframes from input...\n")
     gifts = load_gift_df()
 
     churches = pd.read_csv(churches_filepath)
     projects = pd.read_csv(projects_filepath, dtype={"PROJECT_ID": "string"})
 
     gifts_by_month = merge_and_group_by_month(gifts, churches, projects)
-
-    # gifts_by_month = pd.merge(
-    #     churches,
-    #     gifts_by_month,
-    #     how="outer",
-    #     left_on="CHURCH_CODE",
-    #     right_on="CREDIT_TO",
-    # )
-    # gifts_by_month = gifts_by_month.merge(projects, how="left", on=["PROJECT_ID"])
-
-    # gifts_by_month.to_csv("out/gifts_by_month_with_cat.csv")
-    print(gifts.info())
-    print("--------")
+    print("Woo no errors!\n")
     print(gifts_by_month.info())
-    print("--------")
-    print("--------")
-    print(f"gifts total:          {gifts.AMOUNT.sum()}")
-    # print(f"merged total:         {merged.AMOUNT.sum()}")
-    print(f"gifts_by_month total: {gifts_by_month.AMOUNT.sum()}")
-    gifts_by_month.to_csv("out/gifts_by_month.csv")
-    print("--------")
-    print(
-        gifts_by_month[
-            gifts_by_month.CATEGORY.isna() & gifts_by_month.AMOUNT > 0
-        ].head()
-    )
+    user_input = input("Save output file? [y/N]")
+    if user_input == "y":
+        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+        gifts_by_month.to_csv(output_filepath)
+        print("File saved!")
+    else:
+        print("Fine whatever")
 
 
 if __name__ == "__main__":

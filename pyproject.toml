@@ -8,3 +8,9 @@ dependencies = [
     "numpy>=2.4.4",
     "pandas>=3.0.3",
 ]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.410",
+    "ruff>=0.15.16",
+]
