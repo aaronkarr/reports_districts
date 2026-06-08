@@ -5,13 +5,17 @@ import sys
 
 pd.set_option({"display.max_rows": 100, "display.max_columns": 50})
 
+# SELECT [ cols ] FROM CURATED_DB.WRAPPERS.VW_GIFT_DESIGNATIONS
+# WHERE GIFT_DATE >= TO_TIMESTAMP('2025-01-01');
 if len(sys.argv) == 2:
     if os.path.exists(sys.argv[1]):
         gifts_filepath = sys.argv[1]
 else:
     gifts_filepath = "data/gift_designations_2025.csv"
 
+
 churches_filepath = "data/alliance_churches.csv"
+# select PROJECT_ID from CURATED_DB.TRANSFORMS.PROJECTS_FEES_AND_EVENTS;
 projects_filepath = "data/project_reporting_categories.csv"
 output_filepath = "out/gifts_by_month.csv"
 
@@ -46,42 +50,43 @@ dtypes = {
 }
 
 
-def load_gift_df():
-    gift_df = pd.read_csv(
+def load_gift_df() -> pd.DataFrame:
+    df = pd.read_csv(
         gifts_filepath,
         parse_dates=["GIFT_DATE"],
         usecols=usecols,
         dtype=dtypes,
     )
-    gift_df["AMOUNT"] = gift_df.CONVERTED_AMOUNT_DESIGNATED
-    # df["REVENUE_STREAM"] = add_custom_field(
-    #     df.PROJECT_CUSTOM_FIELD_VALUES_JSON, "Revenue Stream"
-    # )
-    gift_df["SOFT_CREDIT_SELECTION"] = add_custom_col(
-        gift_df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit"
+    df["AMOUNT"] = df.CONVERTED_AMOUNT_DESIGNATED
+
+    # Soft Credit data
+    df["SOFT_CREDIT_SELECTION"] = add_custom_col(
+        df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit"
     ).eq("Yes")
-    gift_df["SOFT_CREDIT_CHURCH"] = add_custom_col(
-        gift_df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit Church"
+
+    df["SOFT_CREDIT_CHURCH"] = add_custom_col(
+        df.GIFT_CUSTOM_FIELD_VALUES_JSON, "Soft Credit Church"
     )
-    gift_df["SOFT_CREDIT_CHURCH_CODE"] = gift_df.SOFT_CREDIT_CHURCH.str.extract(
-        r".*\[(.*)\]"
+    df["SOFT_CREDIT_CHURCH_CODE"] = df.SOFT_CREDIT_CHURCH.str.extract(r".*\[(.*)\]")
+
+    # Church ID data
+    df["CHURCH_CODE"] = add_custom_col(
+        df.CONTACT_CUSTOM_FIELD_VALUES_JSON, "Church Code"
     )
-    gift_df["CHURCH_CODE"] = add_custom_col(
-        gift_df.CONTACT_CUSTOM_FIELD_VALUES_JSON, "Church Code"
-    )
-    # df["CHURCH_DISTRICT"] = tag_to_col(df.CONTACT_TAG_LIST, "District")
-    gift_df["ALLIANCE_CHURCH"] = gift_df.CONTACT_TAG_LIST.str.contains(
+    df["ALLIANCE_CHURCH"] = df.CONTACT_TAG_LIST.str.contains(
         "alliance church", case=False
     )
-    gift_df["YEAR"] = gift_df.GIFT_DATE.dt.year
-    gift_df["MONTH"] = gift_df.GIFT_DATE.dt.month
-    gift_df["CREDIT_TO"] = add_credit_col(gift_df)
 
-    gift_df.drop(columns=drop_cols, inplace=True)
-    return gift_df
+    # Calculated cols for grouping
+    df["YEAR"] = df.GIFT_DATE.dt.year
+    df["MONTH"] = df.GIFT_DATE.dt.month
+    df["CREDIT_TO"] = add_credit_col(df)
+
+    df.drop(columns=drop_cols, inplace=True)
+    return df
 
 
-def add_custom_col(custom_values_col, key):
+def add_custom_col(custom_values_col, key) -> pd.Series:
     pattern = rf'.*"{key}":\s*"([^"]+)".*'
     # Add surrounding quotes to null in raw column to align with non-null string format
     null_quotes = custom_values_col.str.replace("null", '"null"')
@@ -92,7 +97,7 @@ def add_custom_col(custom_values_col, key):
     return series
 
 
-def tag_to_col(custom_tags_col, key):
+def tag_to_col(custom_tags_col, key) -> pd.Series:
     pattern = rf'.*"{key}:\s*([^"]+)".*'
     untrimmed = custom_tags_col[custom_tags_col.str.contains(key)]
     # Remove brackets and newlines
@@ -102,8 +107,8 @@ def tag_to_col(custom_tags_col, key):
     return series
 
 
-def add_credit_col(gift_df):
-    def get_credit_value(df):
+def add_credit_col(gift_df) -> pd.Series:
+    def get_credit_value(df) -> str:
         if df.ALLIANCE_CHURCH:
             return df.CHURCH_CODE
         if df.SOFT_CREDIT_SELECTION:
@@ -114,7 +119,7 @@ def add_credit_col(gift_df):
     return series
 
 
-def merge_and_group_by_month(gifts_df, churches_df, projects_df):
+def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame:
     merged = pd.merge(gifts_df, projects_df, how="left", on="PROJECT_ID")
     gifts_by_month = (
         merged[
@@ -123,11 +128,6 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
                 "MONTH",
                 "CREDIT_TO",
                 "CATEGORY",
-                # "CHURCH_NAME",
-                # "CHURCH_CODE",
-                # "CHURCH_STATUS",
-                # "DISTRICT_NAME",
-                # "ASSOCIATION_NAME",
                 "AMOUNT",
             ]
         ]
@@ -137,11 +137,6 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
                 "MONTH",
                 "CATEGORY",
                 "CREDIT_TO",
-                # "CHURCH_NAME",
-                # "CHURCH_CODE",
-                # "CHURCH_STATUS",
-                # "DISTRICT_NAME",
-                # "ASSOCIATION_NAME",
             ],
             as_index=False,
             dropna=False,
@@ -161,8 +156,8 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
         "YTD_AMOUNT"
     ].shift(12)
 
-    # join church info; TODO outer join to include churches without contributions,
-    # and corresponding fillna of date cols to prevent conversion to float
+    # join church info
+    # TODO include churches without contributions
     gifts_by_month = pd.merge(
         gifts_by_month,
         churches_df,
@@ -172,9 +167,6 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
     )
     gifts_by_month.drop(columns="CONTACT_ID", inplace=True)
 
-    # gifts_by_month = gifts_by_month.astype({"MONTH": "int", "YEAR": "int"})
-    # print(gifts_by_category[gifts_by_category.CATEGORY.isna()])
-    # gifts_by_month.CREDIT_TO.rename("CHURCH_CODE")
     return gifts_by_month
 
 
@@ -183,7 +175,7 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df):
 #             for district in gifts_by_month_df.DISTRICT_NAME:
 
 
-def main():
+def main() -> None:
     print("Loading dataframes from input...\n")
     gifts = load_gift_df()
 
@@ -191,15 +183,16 @@ def main():
     projects = pd.read_csv(projects_filepath, dtype={"PROJECT_ID": "string"})
 
     gifts_by_month = merge_and_group_by_month(gifts, churches, projects)
-    print("Woo no errors!\n")
+    print("Loaded!\n")
     print(gifts_by_month.info())
+    print("----------")
     user_input = input("Save output file? [y/N]")
     if user_input == "y":
         os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         gifts_by_month.to_csv(output_filepath)
         print("File saved!")
     else:
-        print("Fine whatever")
+        print("All that for nothing")
 
 
 if __name__ == "__main__":
