@@ -170,9 +170,70 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
     return gifts_by_month
 
 
-# def generate_reports(gifts_by_month_df):
-#         for month in gifts_by_month_df.MONTH:
-#             for district in gifts_by_month_df.DISTRICT_NAME:
+def generate_reports(gifts_by_month_df):
+    this_year = gifts_by_month_df.YEAR.max()
+    months = gifts_by_month_df[gifts_by_month_df["YEAR"] == this_year].MONTH.unique()
+    districts = list(gifts_by_month_df.DISTRICT_NAME.dropna().unique())
+    associations = list(gifts_by_month_df.ASSOCIATION_NAME.dropna().unique())
+    for month in months:
+        gifts_this_month = gifts_by_month_df[gifts_by_month_df.MONTH == month]
+        district_comparison = (
+            gifts_this_month[
+                [
+                    "DISTRICT_NAME",
+                    "CATEGORY",
+                    "AMOUNT",
+                    "YTD_AMOUNT",
+                    "AMOUNT_LAST_YEAR",
+                    "YTD_LAST_YEAR",
+                ]
+            ]
+            .groupby(["DISTRICT_NAME", "CATEGORY"])
+            .sum()
+        )
+        district_comparison_name = f"out/District Comparison {month}-{this_year}.csv"
+        district_comparison.to_csv(district_comparison_name)
+        association_comparison = (
+            gifts_this_month[
+                [
+                    "ASSOCIATION_NAME",
+                    "CATEGORY",
+                    "AMOUNT",
+                    "YTD_AMOUNT",
+                    "AMOUNT_LAST_YEAR",
+                    "YTD_LAST_YEAR",
+                ]
+            ]
+            .groupby(["ASSOCIATION_NAME", "CATEGORY"])
+            .sum()
+        )
+        assocation_comparison_name = (
+            f"out/Assocation Comparison {month}-{this_year}.csv"
+        )
+        association_comparison.to_csv(assocation_comparison_name)
+        for district in districts:
+            print("---------")
+            print(district)
+            print("---------")
+            district_summary = gifts_by_month_df[
+                gifts_by_month_df["DISTRICT_NAME"].str.startswith(district)
+                & gifts_by_month_df["MONTH"]
+                == month
+            ]
+            district_summary_name = (
+                f"out/Giving Summary - {district} {month}-{this_year}.csv"
+            )
+            district_summary.to_csv(district_summary_name)
+        for association in associations:
+            association_summary = gifts_by_month_df[
+                gifts_by_month_df["ASSOCIATION_NAME"].str.startswith(association)
+                & gifts_by_month_df["MONTH"]
+                == month
+            ]
+            association_summary_name = (
+                f"out/Giving Summary - {association} {month}-{this_year}.csv"
+            )
+            association_summary.to_csv(association_summary_name)
 
 
 def main() -> None:
@@ -193,6 +254,13 @@ def main() -> None:
         print("File saved!")
     else:
         print("All that for nothing")
+
+    user_input = input("Generate reports? [y/N] ")
+    if user_input == "y":
+        generate_reports(gifts_by_month)
+        print("Reports generated!")
+    else:
+        print("Exiting.")
 
 
 if __name__ == "__main__":
