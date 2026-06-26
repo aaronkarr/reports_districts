@@ -165,12 +165,27 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
         .cumsum()
         .round(2)
     )
-    # gifts_by_month["AMOUNT_LAST_YEAR"] = gifts_by_month.groupby(
-    #     ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
-    # )["AMOUNT"].shift(12)
-    # gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(
-    #     ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
-    # )["YTD_AMOUNT"].shift(12)
+
+    # fill missing months
+    keys = gifts_by_month[["CREDIT_TO", "CREDIT_TYPE", "CATEGORY"]].drop_duplicates()
+    months = gifts_by_month[["YEAR", "MONTH"]].drop_duplicates()
+    full = keys.merge(months, how="cross")
+
+    gifts_by_month = full.merge(
+        gifts_by_month,
+        on=["YEAR", "MONTH", "CREDIT_TO", "CREDIT_TYPE", "CATEGORY"],
+        how="left",
+    )
+    gifts_by_month = gifts_by_month.sort_values(
+        ["CREDIT_TO", "CREDIT_TYPE", "CATEGORY", "YEAR", "MONTH"]
+    )
+
+    gifts_by_month["AMOUNT_LAST_YEAR"] = gifts_by_month.groupby(
+        ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
+    )["AMOUNT"].shift(12)
+    gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(
+        ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
+    )["YTD_AMOUNT"].shift(12)
 
     gifts_by_month = pd.merge(
         gifts_by_month,
@@ -190,19 +205,22 @@ def generate_reports(gifts_by_month_df):
     districts = list(gifts_by_month_df.DISTRICT_NAME.dropna().unique())
     associations = list(gifts_by_month_df.ASSOCIATION_NAME.dropna().unique())
     for month in months:
-        gifts_this_month = gifts_by_month_df[gifts_by_month_df.MONTH == month]
+        gifts_this_month = gifts_by_month_df[
+            (gifts_by_month_df.MONTH == month) & (gifts_by_month_df.YEAR == this_year)
+        ]
         district_comparison = (
             gifts_this_month[
                 [
                     "DISTRICT_NAME",
                     "CATEGORY",
+                    "CREDIT_TYPE",
                     "AMOUNT",
                     "YTD_AMOUNT",
-                    # "AMOUNT_LAST_YEAR",
-                    # "YTD_LAST_YEAR",
+                    "AMOUNT_LAST_YEAR",
+                    "YTD_LAST_YEAR",
                 ]
             ]
-            .groupby(["DISTRICT_NAME", "CATEGORY"])
+            .groupby(["DISTRICT_NAME", "CATEGORY", "CREDIT_TYPE"])
             .sum()
             .round(2)
         )
@@ -213,10 +231,11 @@ def generate_reports(gifts_by_month_df):
                 [
                     "ASSOCIATION_NAME",
                     "CATEGORY",
+                    "CREDIT_TYPE",
                     "AMOUNT",
                     "YTD_AMOUNT",
-                    # "AMOUNT_LAST_YEAR",
-                    # "YTD_LAST_YEAR",
+                    "AMOUNT_LAST_YEAR",
+                    "YTD_LAST_YEAR",
                 ]
             ]
             .groupby(["ASSOCIATION_NAME", "CATEGORY"])
