@@ -274,15 +274,13 @@ def main() -> None:
     print("Loaded!\n")
     print(gifts_by_month.info())
     print("----------")
-    print(gifts_by_month.CATEGORY.unique())
-    print("----------")
-    user_input = input("Save output file? [y/N] ")
+    user_input = input("Save gifts_by_month file? [y/N] ")
     if user_input == "y":
         os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         gifts_by_month.to_csv(output_filepath)
         print("File saved!")
     else:
-        print("All that for nothing")
+        print("File not created!")
 
     user_input = input("Generate reports? [y/N] ")
     if user_input == "y":
