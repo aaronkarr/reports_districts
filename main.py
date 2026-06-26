@@ -13,9 +13,13 @@ if len(sys.argv) == 2:
 else:
     gifts_filepath = "data/gift_designations_2025.csv"
 
-
+# all active alliance churches (todo: complete report church list for a year to
+# be all active alliance churches as of start of calendar year, plus any additions
+# throughout the year, not to retroactively include such church giving prior to
+# inclusion in report.)
 churches_filepath = "data/alliance_churches.csv"
-# select PROJECT_ID from CURATED_DB.TRANSFORMS.PROJECTS_FEES_AND_EVENTS;
+# projects: row-wise concat of project categories views to list all project
+# codes with engagement category
 projects_filepath = "data/project_reporting_categories.csv"
 output_filepath = "out/gifts_by_month.csv"
 
@@ -76,6 +80,13 @@ def load_gift_df() -> pd.DataFrame:
     df["ALLIANCE_CHURCH"] = df.CONTACT_TAG_LIST.str.contains(
         "alliance church", case=False
     )
+    # adding CREDIT_TYPE to split sums by direct/soft
+    df["CREDIT_TYPE"] = np.select(
+        [df.ALLIANCE_CHURCH, df.SOFT_CREDIT_SELECTION],
+        ["Direct", "Soft Credit"],
+        default="none",
+    )
+    print(df.CREDIT_TYPE.value_counts())
 
     # Calculated cols for grouping
     df["YEAR"] = df.GIFT_DATE.dt.year
@@ -88,7 +99,7 @@ def load_gift_df() -> pd.DataFrame:
 
 def add_custom_col(custom_values_col, key) -> pd.Series:
     pattern = rf'.*"{key}":\s*"([^"]+)".*'
-    # Add surrounding quotes to null in raw column to align with non-null string format
+    # Adding surrounding quotes to null in raw column to align with non-null string format
     null_quotes = custom_values_col.str.replace("null", '"null"')
     # Remove braces and newlines
     trimmed = null_quotes.str.replace(r"[\{\}\n]", "", regex=True)
@@ -127,6 +138,7 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
                 "YEAR",
                 "MONTH",
                 "CREDIT_TO",
+                "CREDIT_TYPE",
                 "CATEGORY",
                 "AMOUNT",
             ]
@@ -137,27 +149,29 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
                 "MONTH",
                 "CATEGORY",
                 "CREDIT_TO",
+                "CREDIT_TYPE",
             ],
             as_index=False,
             dropna=False,
         )
         .agg({"AMOUNT": "sum"})
     )
+    gifts_by_month.AMOUNT = gifts_by_month.AMOUNT.round(2)
 
     gifts_by_month["YTD_AMOUNT"] = (
-        gifts_by_month.groupby(["YEAR", "CATEGORY", "CREDIT_TO"])["AMOUNT"]
+        gifts_by_month.groupby(["YEAR", "CATEGORY", "CREDIT_TO", "CREDIT_TYPE"])[
+            "AMOUNT"
+        ]
         .cumsum()
         .round(2)
     )
-    gifts_by_month["AMOUNT_LAST_YEAR"] = gifts_by_month.groupby(
-        ["CATEGORY", "CREDIT_TO"]
-    )["AMOUNT"].shift(12)
-    gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(["CATEGORY", "CREDIT_TO"])[
-        "YTD_AMOUNT"
-    ].shift(12)
+    # gifts_by_month["AMOUNT_LAST_YEAR"] = gifts_by_month.groupby(
+    #     ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
+    # )["AMOUNT"].shift(12)
+    # gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(
+    #     ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
+    # )["YTD_AMOUNT"].shift(12)
 
-    # join church info
-    # TODO include churches without contributions
     gifts_by_month = pd.merge(
         gifts_by_month,
         churches_df,
@@ -184,12 +198,13 @@ def generate_reports(gifts_by_month_df):
                     "CATEGORY",
                     "AMOUNT",
                     "YTD_AMOUNT",
-                    "AMOUNT_LAST_YEAR",
-                    "YTD_LAST_YEAR",
+                    # "AMOUNT_LAST_YEAR",
+                    # "YTD_LAST_YEAR",
                 ]
             ]
             .groupby(["DISTRICT_NAME", "CATEGORY"])
             .sum()
+            .round(2)
         )
         district_comparison_name = f"out/District Comparison {month}-{this_year}.csv"
         district_comparison.to_csv(district_comparison_name)
@@ -200,39 +215,32 @@ def generate_reports(gifts_by_month_df):
                     "CATEGORY",
                     "AMOUNT",
                     "YTD_AMOUNT",
-                    "AMOUNT_LAST_YEAR",
-                    "YTD_LAST_YEAR",
+                    # "AMOUNT_LAST_YEAR",
+                    # "YTD_LAST_YEAR",
                 ]
             ]
             .groupby(["ASSOCIATION_NAME", "CATEGORY"])
             .sum()
+            .round(2)
         )
         assocation_comparison_name = (
             f"out/Assocation Comparison {month}-{this_year}.csv"
         )
         association_comparison.to_csv(assocation_comparison_name)
+
         for district in districts:
-            print("---------")
-            print(district)
-            print("---------")
-            district_summary = gifts_by_month_df[
-                gifts_by_month_df["DISTRICT_NAME"].str.startswith(district)
-                & gifts_by_month_df["MONTH"]
-                == month
+            district_summary = gifts_this_month[
+                gifts_this_month["DISTRICT_NAME"].str.startswith(district)
             ]
             district_summary_name = (
-                f"out/Giving Summary - {district} {month}-{this_year}.csv"
+                f"out/Giving Summary - {district} District {month}-{this_year}.csv"
             )
             district_summary.to_csv(district_summary_name)
         for association in associations:
-            association_summary = gifts_by_month_df[
-                gifts_by_month_df["ASSOCIATION_NAME"].str.startswith(association)
-                & gifts_by_month_df["MONTH"]
-                == month
+            association_summary = gifts_this_month[
+                gifts_this_month["ASSOCIATION_NAME"].str.startswith(association)
             ]
-            association_summary_name = (
-                f"out/Giving Summary - {association} {month}-{this_year}.csv"
-            )
+            association_summary_name = f"out/Giving Summary - {association} Association {month}-{this_year}.csv"
             association_summary.to_csv(association_summary_name)
 
 
@@ -247,7 +255,9 @@ def main() -> None:
     print("Loaded!\n")
     print(gifts_by_month.info())
     print("----------")
-    user_input = input("Save output file? [y/N]")
+    print(gifts_by_month.CATEGORY.unique())
+    print("----------")
+    user_input = input("Save output file? [y/N] ")
     if user_input == "y":
         os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         gifts_by_month.to_csv(output_filepath)
