@@ -187,6 +187,17 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
         ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
     )["YTD_AMOUNT"].shift(12)
 
+    gifts_by_month["PCT_CHANGE"] = (
+        100
+        * (gifts_by_month.AMOUNT - gifts_by_month.AMOUNT_LAST_YEAR)
+        / gifts_by_month.AMOUNT_LAST_YEAR
+    )
+    gifts_by_month["YTD_PCT_CHANGE"] = (
+        100
+        * (gifts_by_month.YTD_AMOUNT - gifts_by_month.YTD_AMOUNT_LAST_YEAR)
+        / gifts_by_month.YTD_AMOUNT_LAST_YEAR
+    )
+
     gifts_by_month = pd.merge(
         gifts_by_month,
         churches_df,
@@ -215,9 +226,11 @@ def generate_reports(gifts_by_month_df):
                     "CATEGORY",
                     "CREDIT_TYPE",
                     "AMOUNT",
-                    "YTD_AMOUNT",
                     "AMOUNT_LAST_YEAR",
+                    "PCT_CHANGE",
+                    "YTD_AMOUNT",
                     "YTD_LAST_YEAR",
+                    "YTD_PCT_CHANGE",
                 ]
             ]
             .groupby(["DISTRICT_NAME", "CATEGORY", "CREDIT_TYPE"])
