@@ -183,19 +183,19 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
     gifts_by_month["AMOUNT_LAST_YEAR"] = gifts_by_month.groupby(
         ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
     )["AMOUNT"].shift(12)
-    gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(
-        ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
-    )["YTD_AMOUNT"].shift(12)
-
     gifts_by_month["PCT_CHANGE"] = (
         100
         * (gifts_by_month.AMOUNT - gifts_by_month.AMOUNT_LAST_YEAR)
         / gifts_by_month.AMOUNT_LAST_YEAR
     )
+
+    gifts_by_month["YTD_LAST_YEAR"] = gifts_by_month.groupby(
+        ["CATEGORY", "CREDIT_TO", "CREDIT_TYPE"]
+    )["YTD_AMOUNT"].shift(12)
     gifts_by_month["YTD_PCT_CHANGE"] = (
         100
-        * (gifts_by_month.YTD_AMOUNT - gifts_by_month.YTD_AMOUNT_LAST_YEAR)
-        / gifts_by_month.YTD_AMOUNT_LAST_YEAR
+        * (gifts_by_month.YTD_AMOUNT - gifts_by_month.YTD_LAST_YEAR)
+        / gifts_by_month.YTD_LAST_YEAR
     )
 
     gifts_by_month = pd.merge(
@@ -205,7 +205,25 @@ def merge_and_group_by_month(gifts_df, churches_df, projects_df) -> pd.DataFrame
         left_on="CREDIT_TO",
         right_on="CHURCH_CODE",
     )
-    gifts_by_month.drop(columns="CONTACT_ID", inplace=True)
+    gifts_by_month = gifts_by_month[
+        [
+            "MONTH",
+            "YEAR",
+            "CHURCH_NAME",
+            "CHURCH_CODE",
+            "CHURCH_STATUS",
+            "DISTRICT_NAME",
+            "ASSOCIATION_NAME",
+            "CREDIT_TYPE",
+            "CATEGORY",
+            "AMOUNT",
+            "AMOUNT_LAST_YEAR",
+            "PCT_CHANGE",
+            "YTD_AMOUNT",
+            "YTD_LAST_YEAR",
+            "YTD_PCT_CHANGE",
+        ]
+    ]
 
     return gifts_by_month
 
@@ -246,9 +264,11 @@ def generate_reports(gifts_by_month_df):
                     "CATEGORY",
                     "CREDIT_TYPE",
                     "AMOUNT",
-                    "YTD_AMOUNT",
                     "AMOUNT_LAST_YEAR",
+                    "PCT_CHANGE",
+                    "YTD_AMOUNT",
                     "YTD_LAST_YEAR",
+                    "YTD_PCT_CHANGE",
                 ]
             ]
             .groupby(["ASSOCIATION_NAME", "CATEGORY"])
