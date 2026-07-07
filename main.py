@@ -305,7 +305,7 @@ def main() -> None:
 
     gifts_by_month = merge_and_group_by_month(gifts, churches, projects)
     print("Loaded!\n")
-    print(gifts_by_month.info())
+    print(gifts_by_month[gifts_by_month.CREDIT_TYPE == "none"].AMOUNT.sum())
     print("----------")
     user_input = input("Save gifts_by_month file? [y/N] ")
     if user_input == "y":
